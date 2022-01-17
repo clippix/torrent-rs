@@ -45,7 +45,7 @@ struct ConnectOut {
     cid: ConnectionId,
 }
 
-#[repr(C, align(4))]
+#[repr(packed)]
 #[derive(Debug)]
 struct AnnounceIn {
     cid: ConnectionId,
@@ -111,12 +111,12 @@ impl UdpConnection {
             info_hash: *info_hash,
             peer_id: *pid,
             downloaded: 0,
-            left: 0,
+            left: 3,
             uploaded: 0,
             event: 0,
             ipv4: 0,
             key: 0,
-            num_want: 0,
+            num_want: 1,
             port: 0,
         };
 
@@ -136,6 +136,7 @@ mod tracker_tests {
     use crate::definitions::TORRENT_RS_PEER_ID;
 
     #[test]
+    #[ignore]
     fn test_connect_empty_id() {
         let mut rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
@@ -158,7 +159,6 @@ mod tracker_tests {
     }
 
     #[test]
-    #[ignore]
     fn test_announce_struct_size() {
         let mut rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
