@@ -3,9 +3,9 @@ use crate::definitions::*;
 const PSTR: &[u8; 19] = b"BitTorrent protocol";
 const PSTR_LEN: usize = 19;
 const RESERVED_LEN: usize = 8;
-const TORRENT_RS_PEER_ID: &[u8; PEER_ID_LEN] = b"-RS0001-RANDOM_CHARA";
 const HANDSHAKE_SIZE: usize = 1 + PSTR_LEN + RESERVED_LEN + INFO_HASH_LEN + PEER_ID_LEN;
 
+#[repr(packed)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Handshake {
     pstr_len: u8,
@@ -43,26 +43,7 @@ impl Handshake {
     // TODO: look for a more idiomatic / effective method
     pub fn to_bytes(self) -> [u8; HANDSHAKE_SIZE] {
         use std::mem;
-        use std::ptr;
-        let mut res = [0; HANDSHAKE_SIZE];
-
-        res[0] = self.pstr_len;
-        unsafe {
-            ptr::copy_nonoverlapping(self.protocol.as_ptr(), res[1..20].as_mut_ptr(), PSTR_LEN);
-            ptr::copy_nonoverlapping(
-                self.reserved.as_ptr(),
-                res[20..28].as_mut_ptr(),
-                RESERVED_LEN,
-            );
-            ptr::copy_nonoverlapping(
-                self.info_hash.as_ptr(),
-                res[28..48].as_mut_ptr(),
-                INFO_HASH_LEN,
-            );
-            ptr::copy_nonoverlapping(self.peer_id.as_ptr(), res[48..].as_mut_ptr(), PEER_ID_LEN);
-        }
-
-        res
+        unsafe { mem::transmute(self) }
     }
 }
 
