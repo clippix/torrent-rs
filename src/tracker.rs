@@ -63,6 +63,18 @@ struct AnnounceIn {
     port: u16,
 }
 
+#[repr(packed)]
+#[derive(Debug)]
+struct AnnounceOut {
+    action: u32,
+    tid: TransactionId,
+    interval: u32,
+    seeders: u32,
+    leechers: u32,
+    peers: Option<Vec<(u32, u16)>>,
+}
+
+// TODO: return Result
 fn hash_to_bytes(hash: &str) -> InfoHash {
     let mut res = [0u8; INFO_HASH_LEN];
 
@@ -116,31 +128,44 @@ impl UdpConnection {
         Ok(())
     }
 
-    pub async fn announce(&self, info_hash: &str, peer_id: Option<&PeerId>) -> io::Result<()> {
+    pub async fn announce(
+        &self,
+        info_hash: &str,
+        peer_id: Option<&PeerId>,
+    ) -> io::Result<AnnounceOut> {
         let pid = peer_id.unwrap_or(TORRENT_RS_PEER_ID);
         let ann = AnnounceIn {
             cid: self.cid,
-            action: 1,
+            action: (1 as u32).to_be(),
             tid: self.tid,
             info_hash: hash_to_bytes(info_hash),
             peer_id: *pid,
             downloaded: 0,
-            left: 3012313088,
+            left: 0,
             uploaded: 0,
             event: 0,
             ipv4: 0,
             key: 0,
-            num_want: 1,
+            num_want: 0,
             port: 0,
         };
 
-        let mut res = [0u8; 256];
-        println!("Announce: {:?}", ann);
+        // TODO: make buf's size num_want dependant
+        let mut buf = [0u8; 256];
         let data: [u8; std::mem::size_of::<AnnounceIn>()] = unsafe { mem::transmute(ann) };
         self.socket.send(&data).await?;
-        self.socket.recv(&mut res).await?;
-        println!("announce: {:X?}", res);
-        Ok(())
+        self.socket.recv(&mut buf).await?;
+
+        let res = AnnounceOut {
+            action: u32::from_be_bytes(buf[0..4].try_into().unwrap()),
+            tid: u32::from_ne_bytes(buf[4..8].try_into().unwrap()),
+            interval: u32::from_be_bytes(buf[8..12].try_into().unwrap()),
+            seeders: u32::from_be_bytes(buf[12..16].try_into().unwrap()),
+            leechers: u32::from_be_bytes(buf[16..20].try_into().unwrap()),
+            peers: None,
+        };
+
+        Ok(res)
     }
 }
 
@@ -181,9 +206,11 @@ mod tracker_tests {
                 .unwrap();
 
             udpc.connect().await.unwrap();
-            udpc.announce("52b62d34a8336f2e934df62181ad4c2f1b43c185", None)
+            let ann = udpc
+                .announce("52b62d34a8336f2e934df62181ad4c2f1b43c185", None)
                 .await
                 .unwrap();
+            println!("Announce resp: {:X?}", ann);
         });
         assert!(false);
     }
