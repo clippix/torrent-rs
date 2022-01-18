@@ -69,8 +69,8 @@ struct AnnounceOut {
     action: u32,
     tid: TransactionId,
     interval: u32,
-    seeders: u32,
     leechers: u32,
+    seeders: u32,
     peers: Option<Vec<(u32, u16)>>,
 }
 
@@ -160,8 +160,8 @@ impl UdpConnection {
             action: u32::from_be_bytes(buf[0..4].try_into().unwrap()),
             tid: u32::from_ne_bytes(buf[4..8].try_into().unwrap()),
             interval: u32::from_be_bytes(buf[8..12].try_into().unwrap()),
-            seeders: u32::from_be_bytes(buf[12..16].try_into().unwrap()),
-            leechers: u32::from_be_bytes(buf[16..20].try_into().unwrap()),
+            leechers: u32::from_be_bytes(buf[12..16].try_into().unwrap()),
+            seeders: u32::from_be_bytes(buf[16..20].try_into().unwrap()),
             peers: None,
         };
 
