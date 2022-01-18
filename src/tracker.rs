@@ -3,7 +3,7 @@ use std::mem;
 use std::{io, net::SocketAddr};
 use tokio::net::UdpSocket;
 
-use crate::definitions::{InfoHash, PeerId, TORRENT_RS_PEER_ID};
+use crate::definitions::{InfoHash, PeerId, INFO_HASH_LEN, TORRENT_RS_PEER_ID};
 
 pub type ConnectionId = u64;
 
@@ -63,6 +63,20 @@ struct AnnounceIn {
     port: u16,
 }
 
+fn hash_to_bytes(hash: &str) -> InfoHash {
+    let mut res = [0u8; INFO_HASH_LEN];
+
+    // TODO: look for another way to split the str
+    hash.as_bytes()
+        .chunks(2)
+        .map(|b| std::str::from_utf8(b).unwrap())
+        .map(|n| u8::from_str_radix(n, 16).unwrap())
+        .enumerate()
+        .for_each(|(i, x)| res[i] = x);
+
+    res
+}
+
 impl UdpConnection {
     pub async fn new(tracker: &str, id: Option<TransactionId>) -> io::Result<Self> {
         let sock = UdpSocket::bind(SOCKET_BIND).await?;
@@ -102,16 +116,16 @@ impl UdpConnection {
         Ok(())
     }
 
-    pub async fn announce(&self, info_hash: &InfoHash, peer_id: Option<&PeerId>) -> io::Result<()> {
+    pub async fn announce(&self, info_hash: &str, peer_id: Option<&PeerId>) -> io::Result<()> {
         let pid = peer_id.unwrap_or(TORRENT_RS_PEER_ID);
         let ann = AnnounceIn {
             cid: self.cid,
             action: 1,
             tid: self.tid,
-            info_hash: *info_hash,
+            info_hash: hash_to_bytes(info_hash),
             peer_id: *pid,
             downloaded: 0,
-            left: 3,
+            left: 3012313088,
             uploaded: 0,
             event: 0,
             ipv4: 0,
@@ -159,7 +173,7 @@ mod tracker_tests {
     }
 
     #[test]
-    fn test_announce_struct_size() {
+    fn test_announce_empty_peer() {
         let mut rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let mut udpc = UdpConnection::new("tracker.opentrackr.org:1337", None)
@@ -167,7 +181,9 @@ mod tracker_tests {
                 .unwrap();
 
             udpc.connect().await.unwrap();
-            udpc.announce(b"52b62d34a8336f2e934d", None).await.unwrap();
+            udpc.announce("52b62d34a8336f2e934df62181ad4c2f1b43c185", None)
+                .await
+                .unwrap();
         });
         assert!(false);
     }
