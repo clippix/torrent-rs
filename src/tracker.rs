@@ -1,6 +1,9 @@
 use rand::prelude::*;
 use std::mem;
-use std::{io, net::SocketAddr};
+use std::{
+    io,
+    net::{Ipv4Addr, SocketAddr},
+};
 use tokio::net::UdpSocket;
 
 use crate::definitions::{InfoHash, PeerId, INFO_HASH_LEN, TORRENT_RS_PEER_ID};
@@ -10,17 +13,6 @@ pub type ConnectionId = u64;
 pub type TransactionId = u32;
 
 const SOCKET_BIND: &str = "0.0.0.0:8080";
-
-// // Generate a random TransactionId
-// // Could be rewritten with a u32 and bitmasking
-// fn generate_transaction_id() -> TransactionId {
-//     [
-//         rand::random(),
-//         rand::random(),
-//         rand::random(),
-//         rand::random(),
-//     ]
-// }
 
 #[derive(Debug)]
 struct UdpConnection {
@@ -71,7 +63,7 @@ struct AnnounceOut {
     interval: u32,
     leechers: u32,
     seeders: u32,
-    peers: Option<Vec<(u32, u16)>>,
+    peers: Option<Vec<(Ipv4Addr, u16)>>,
 }
 
 // TODO: return Result
@@ -134,6 +126,9 @@ impl UdpConnection {
         peer_id: Option<&PeerId>,
     ) -> io::Result<AnnounceOut> {
         let pid = peer_id.unwrap_or(TORRENT_RS_PEER_ID);
+        // TODO: make it dynamic
+        const num_peers: u32 = 1;
+
         let ann = AnnounceIn {
             cid: self.cid,
             action: (1 as u32).to_be(),
@@ -146,12 +141,11 @@ impl UdpConnection {
             event: 0,
             ipv4: 0,
             key: 0,
-            num_want: 0,
+            num_want: num_peers.to_be(),
             port: 0,
         };
 
-        // TODO: make buf's size num_want dependant
-        let mut buf = [0u8; 256];
+        let mut buf = [0u8; 20 + 6 * num_peers as usize];
         let data: [u8; std::mem::size_of::<AnnounceIn>()] = unsafe { mem::transmute(ann) };
         self.socket.send(&data).await?;
         self.socket.recv(&mut buf).await?;
@@ -162,7 +156,21 @@ impl UdpConnection {
             interval: u32::from_be_bytes(buf[8..12].try_into().unwrap()),
             leechers: u32::from_be_bytes(buf[12..16].try_into().unwrap()),
             seeders: u32::from_be_bytes(buf[16..20].try_into().unwrap()),
-            peers: None,
+            peers: match num_peers {
+                0 => None,
+                n => Some(
+                    (0..n as usize)
+                        .map(|x| {
+                            let idx = 20 + 6 * x;
+                            (
+                                Ipv4Addr::new(buf[idx], buf[idx + 1], buf[idx + 2], buf[idx + 3]),
+                                u16::from_be_bytes(buf[24 + x * 6..26 + x * 6].try_into().unwrap()),
+                            )
+                        })
+                        .filter(|ipport| *ipport != (Ipv4Addr::new(0, 0, 0, 0), 0))
+                        .collect(),
+                ),
+            },
         };
 
         Ok(res)
@@ -173,45 +181,43 @@ impl UdpConnection {
 mod tracker_tests {
     use super::*;
     use crate::definitions::TORRENT_RS_PEER_ID;
+    use serial_test::serial;
 
-    #[test]
-    #[ignore]
-    fn test_connect_empty_id() {
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let udpc = UdpConnection::new("tracker.opentrackr.org:1337", None).await;
-            if let Err(ref e) = udpc {
-                println!("Error: {}", e);
-                assert!(false);
-            }
+    #[tokio::test]
+    #[serial]
+    async fn test_connect_empty_id() {
+        let udpc = UdpConnection::new("tracker.opentrackr.org:1337", None).await;
+        if let Err(ref e) = udpc {
+            println!("Error: {}", e);
+            assert!(false);
+        }
 
-            let mut udpc = udpc.unwrap();
-            let res = udpc.connect().await;
-            if let Err(ref e) = res {
-                println!("Error: {}", e);
-                assert!(false);
-            }
+        let mut udpc = udpc.unwrap();
+        let res = udpc.connect().await;
+        if let Err(ref e) = res {
+            println!("Error: {}", e);
+            assert!(false);
+        }
 
-            assert_ne!(udpc.cid, 0);
-        });
-        // Would be surprising if it was the case
+        assert_ne!(udpc.cid, 0);
     }
 
-    #[test]
-    fn test_announce_empty_peer() {
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let mut udpc = UdpConnection::new("tracker.opentrackr.org:1337", None)
-                .await
-                .unwrap();
+    #[tokio::test]
+    #[serial]
+    async fn test_announce_empty_peer() {
+        let mut udpc = UdpConnection::new("tracker.opentrackr.org:1337", None)
+            .await
+            .unwrap();
 
-            udpc.connect().await.unwrap();
-            let ann = udpc
-                .announce("52b62d34a8336f2e934df62181ad4c2f1b43c185", None)
-                .await
-                .unwrap();
-            println!("Announce resp: {:X?}", ann);
-        });
-        assert!(false);
+        udpc.connect().await.unwrap();
+        let ann = udpc
+            .announce("52b62d34a8336f2e934df62181ad4c2f1b43c185", None)
+            .await
+            .unwrap();
+
+        assert_eq!(1, ann.action);
+        assert_eq!(udpc.tid, ann.tid);
+        // Shouldn't be true for every case
+        assert_ne!(None, ann.peers);
     }
 }
