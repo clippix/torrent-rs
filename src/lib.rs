@@ -1,6 +1,6 @@
-mod definitions;
-mod handshake;
-mod tracker;
+pub mod definitions;
+pub mod handshake;
+pub mod tracker;
 
 #[cfg(test)]
 mod tests {

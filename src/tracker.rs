@@ -177,6 +177,12 @@ impl UdpConnection {
     }
 }
 
+impl AnnounceOut {
+    pub fn get_peers(&self) -> Option<&Vec<(Ipv4Addr, u16)>> {
+        self.peers.as_ref()
+    }
+}
+
 #[cfg(test)]
 mod tracker_tests {
     use super::*;
