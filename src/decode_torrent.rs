@@ -12,7 +12,7 @@ struct MetaInfo {
     pub created_by: Option<String>,
     pub creation_date: Option<u64>,
     pub http_seeds: Option<Vec<String>>,
-    pub url_list: Option<Vec<String>>,
+    pub url_list: Option<String>,
 }
 
 // File related information (Single-file format)
@@ -101,7 +101,9 @@ impl FromBencode for MetaInfo {
                         .map(Some)?;
                 }
                 (b"url-list", value) => {
-                    url_list = None;
+                    url_list = String::decode_bencode_object(value)
+                        .context("url-list")
+                        .map(Some)?;
                 }
                 (unknown_field, _) => {
                     return Err(Error::unexpected_field(String::from_utf8_lossy(
@@ -211,5 +213,16 @@ mod decode_torrent_tests {
             meta_info.info.name,
             "manjaro-gnome-21.2.1-minimal-220103-linux515.iso"
         );
+        assert_eq!(
+            meta_info.url_list.unwrap(),
+            "https://download.manjaro.org/gnome/21.2.1/manjaro-gnome-21.2.1-minimal-220103-linux515.iso"
+        );
+    }
+
+    #[test]
+    fn test_local_torrent() {
+        let torrent = read_torrent("./tests/torrent_files/test_local.torrent");
+        let meta_info = MetaInfo::from_bencode(&torrent).unwrap();
+        assert_eq!(meta_info.announce, "udp://192.168.37.239:3000");
     }
 }
