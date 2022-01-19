@@ -15,7 +15,7 @@ pub type TransactionId = u32;
 const SOCKET_BIND: &str = "0.0.0.0:8080";
 
 #[derive(Debug)]
-struct UdpConnection {
+pub struct UdpConnection {
     socket: UdpSocket,
     cid: ConnectionId,
     tid: TransactionId,
@@ -57,7 +57,7 @@ struct AnnounceIn {
 
 #[repr(packed)]
 #[derive(Debug)]
-struct AnnounceOut {
+pub struct AnnounceOut {
     action: u32,
     tid: TransactionId,
     interval: u32,
@@ -124,10 +124,10 @@ impl UdpConnection {
         &self,
         info_hash: &str,
         peer_id: Option<&PeerId>,
+        num_peers: Option<u32>,
     ) -> io::Result<AnnounceOut> {
         let pid = peer_id.unwrap_or(TORRENT_RS_PEER_ID);
-        // TODO: make it dynamic
-        const num_peers: u32 = 1;
+        let num_peers = num_peers.unwrap_or(1);
 
         let ann = AnnounceIn {
             cid: self.cid,
@@ -145,7 +145,7 @@ impl UdpConnection {
             port: 0,
         };
 
-        let mut buf = [0u8; 20 + 6 * num_peers as usize];
+        let mut buf = vec![0u8; 20 + 6 * num_peers as usize];
         let data: [u8; std::mem::size_of::<AnnounceIn>()] = unsafe { mem::transmute(ann) };
         self.socket.send(&data).await?;
         self.socket.recv(&mut buf).await?;
@@ -185,6 +185,7 @@ mod tracker_tests {
 
     #[tokio::test]
     #[serial]
+    #[ignore]
     async fn test_connect_empty_id() {
         let udpc = UdpConnection::new("tracker.opentrackr.org:1337", None).await;
         if let Err(ref e) = udpc {
@@ -204,6 +205,7 @@ mod tracker_tests {
 
     #[tokio::test]
     #[serial]
+    #[ignore]
     async fn test_announce_empty_peer() {
         let mut udpc = UdpConnection::new("tracker.opentrackr.org:1337", None)
             .await
@@ -211,7 +213,7 @@ mod tracker_tests {
 
         udpc.connect().await.unwrap();
         let ann = udpc
-            .announce("52b62d34a8336f2e934df62181ad4c2f1b43c185", None)
+            .announce("52b62d34a8336f2e934df62181ad4c2f1b43c185", None, None)
             .await
             .unwrap();
 
