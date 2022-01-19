@@ -19,9 +19,10 @@ struct MetaInfo {
 #[derive(Debug)]
 struct Info {
     pub piece_length: String,
-    pub pieces: Vec<u8>,
+    pub pieces: Vec<String>,
     pub name: String,
     pub file_length: String,
+    pub md5sum: Option<String>,
 }
 
 impl FromBencode for MetaInfo {
@@ -128,6 +129,22 @@ impl FromBencode for MetaInfo {
     }
 }
 
+fn bytes_to_hash(hash: &[u8; 20]) -> String {
+    hash.iter().map(|c| format!("{:x}", c)).collect()
+}
+
+fn pieces_to_hash(input: &[u8]) -> Vec<String> {
+    assert!(input.len() % 20 == 0);
+
+    let mut res = Vec::new();
+
+    for chk in input.chunks(20) {
+        res.push(bytes_to_hash(chk.try_into().unwrap()));
+    }
+
+    res
+}
+
 impl FromBencode for Info {
     const EXPECTED_RECURSION_DEPTH: usize = 1;
 
@@ -143,6 +160,7 @@ impl FromBencode for Info {
         let mut name = None;
         let mut piece_length = None;
         let mut pieces = None;
+        let mut md5sum = None;
 
         let mut dict_dec = object.try_into_dictionary()?;
         while let Some(pair) = dict_dec.next_pair()? {
@@ -169,7 +187,12 @@ impl FromBencode for Info {
                 (b"pieces", value) => {
                     pieces = AsString::decode_bencode_object(value)
                         .context("pieces")
-                        .map(|bytes| Some(bytes.0))?;
+                        .map(|bytes| Some(pieces_to_hash(&bytes.0)))?;
+                }
+                (b"md5sum", value) => {
+                    md5sum = String::decode_bencode_object(value)
+                        .context("md5sum")
+                        .map(Some)?;
                 }
                 (unknown_field, _) => {
                     return Err(Error::unexpected_field(String::from_utf8_lossy(
@@ -190,6 +213,7 @@ impl FromBencode for Info {
             name,
             piece_length,
             pieces,
+            md5sum,
         })
     }
 }
@@ -224,5 +248,9 @@ mod decode_torrent_tests {
         let torrent = read_torrent("./tests/torrent_files/test_local.torrent");
         let meta_info = MetaInfo::from_bencode(&torrent).unwrap();
         assert_eq!(meta_info.announce, "udp://192.168.37.239:3000");
+        assert_eq!(
+            meta_info.info.pieces.len(),
+            meta_info.info.piece_length.parse::<usize>().unwrap()
+        );
     }
 }
