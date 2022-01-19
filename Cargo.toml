@@ -9,3 +9,4 @@ edition = "2021"
 tokio = { version = "1.15.0", features = ["full"] }
 rand = "0.8.4"
 serial_test = "0.5.1"
+bendy = "0.3.3"
