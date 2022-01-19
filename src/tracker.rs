@@ -189,10 +189,12 @@ mod tracker_tests {
     use crate::definitions::TORRENT_RS_PEER_ID;
     use serial_test::serial;
 
+    const TRACKER: &str = "192.168.37.239:3000";
+
     #[tokio::test]
     #[serial]
     async fn test_connect_empty_id() {
-        let udpc = UdpConnection::new("tracker.opentrackr.org:1337", None).await;
+        let udpc = UdpConnection::new(TRACKER, None).await;
         if let Err(ref e) = udpc {
             println!("Error: {}", e);
             assert!(false);
@@ -211,9 +213,7 @@ mod tracker_tests {
     #[tokio::test]
     #[serial]
     async fn test_announce_empty_peer() {
-        let mut udpc = UdpConnection::new("tracker.opentrackr.org:1337", None)
-            .await
-            .unwrap();
+        let mut udpc = UdpConnection::new(TRACKER, None).await.unwrap();
 
         udpc.connect().await.unwrap();
         let ann = udpc

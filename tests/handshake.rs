@@ -7,7 +7,7 @@ use serial_test::serial;
 #[tokio::test]
 #[serial]
 async fn connect_announce_handshake() {
-    let mut udpc = tracker::UdpConnection::new("tracker.opentrackr.org:1337", None)
+    let mut udpc = tracker::UdpConnection::new("192.168.37.239:3000", None)
         .await
         .unwrap();
     udpc.connect().await.unwrap();
@@ -31,4 +31,5 @@ async fn connect_announce_handshake() {
     };
 
     assert_eq!(hash_bytes, *hs.get_hash());
+    assert_ne!(*definitions::TORRENT_RS_PEER_ID, *hs.get_peer_id());
 }
