@@ -248,9 +248,5 @@ mod decode_torrent_tests {
         let torrent = read_torrent("./tests/torrent_files/test_local.torrent");
         let meta_info = MetaInfo::from_bencode(&torrent).unwrap();
         assert_eq!(meta_info.announce, "udp://192.168.37.239:3000");
-        assert_eq!(
-            meta_info.info.pieces.len(),
-            meta_info.info.piece_length.parse::<usize>().unwrap()
-        );
     }
 }
