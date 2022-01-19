@@ -67,7 +67,7 @@ pub struct AnnounceOut {
 }
 
 // TODO: return Result
-fn hash_to_bytes(hash: &str) -> InfoHash {
+pub fn hash_to_bytes(hash: &str) -> InfoHash {
     let mut res = [0u8; INFO_HASH_LEN];
 
     // TODO: look for another way to split the str
@@ -191,7 +191,6 @@ mod tracker_tests {
 
     #[tokio::test]
     #[serial]
-    #[ignore]
     async fn test_connect_empty_id() {
         let udpc = UdpConnection::new("tracker.opentrackr.org:1337", None).await;
         if let Err(ref e) = udpc {
@@ -211,7 +210,6 @@ mod tracker_tests {
 
     #[tokio::test]
     #[serial]
-    #[ignore]
     async fn test_announce_empty_peer() {
         let mut udpc = UdpConnection::new("tracker.opentrackr.org:1337", None)
             .await

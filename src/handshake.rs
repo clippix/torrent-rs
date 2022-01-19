@@ -1,5 +1,10 @@
 use crate::definitions::*;
 
+use std::error::Error;
+use std::{io, net::Ipv4Addr};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+
 const PSTR: &[u8; 19] = b"BitTorrent protocol";
 const PSTR_LEN: usize = 19;
 const RESERVED_LEN: usize = 8;
@@ -7,7 +12,7 @@ const HANDSHAKE_SIZE: usize = 1 + PSTR_LEN + RESERVED_LEN + INFO_HASH_LEN + PEER
 
 #[repr(packed)]
 #[derive(Copy, Clone, Debug, PartialEq)]
-struct Handshake {
+pub struct Handshake {
     pstr_len: u8,
     protocol: [u8; PSTR_LEN],
     reserved: [u8; RESERVED_LEN],
@@ -40,10 +45,31 @@ impl Handshake {
         }
     }
 
+    pub fn set_hash(&mut self, hash: &InfoHash) {
+        self.info_hash = *hash;
+    }
+
+    pub fn get_hash(&self) -> &InfoHash {
+        &self.info_hash
+    }
+
+    pub fn get_peer_id(&self) -> &PeerId {
+        &self.peer_id
+    }
+
     // TODO: look for a more idiomatic / effective method
     pub fn to_bytes(self) -> [u8; HANDSHAKE_SIZE] {
         use std::mem;
         unsafe { mem::transmute(self) }
+    }
+
+    pub async fn send(self, stream: &mut TcpStream) -> Result<Self, Box<dyn Error>> {
+        let mut data = self.to_bytes();
+
+        stream.write_all(&data).await?;
+        stream.read(&mut data).await?;
+
+        Ok(Handshake::new(&data))
     }
 }
 
