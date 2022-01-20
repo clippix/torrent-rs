@@ -1,7 +1,9 @@
 use crate::definitions::*;
 
 use std::error::Error;
+use std::sync::Arc;
 use std::{io, net::Ipv4Addr};
+
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
