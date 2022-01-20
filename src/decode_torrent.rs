@@ -4,6 +4,10 @@ use bendy::{
     encoding::AsString,
 };
 
+use sha1::{Digest, Sha1};
+
+use crate::definitions::InfoHash;
+
 #[derive(Debug)]
 struct MetaInfo {
     pub announce: String,
@@ -23,6 +27,88 @@ struct Info {
     pub name: String,
     pub file_length: String,
     pub md5sum: Option<String>,
+}
+
+fn bytes_to_num(input: &[u8]) -> usize {
+    let mut res = 0;
+
+    for &x in input {
+        res *= 10;
+        res += (x - b'0') as usize;
+    }
+
+    res
+}
+
+// TODO: Find a more elegant / normal way of getting Info Hash
+fn get_info_hash(input: &[u8]) -> InfoHash {
+    let mut idx = 0;
+    let mut buf = vec![];
+
+    loop {
+        let bytes: [u8; 7] = input[idx..idx + 7].try_into().unwrap();
+        if bytes == *b"4:infod" {
+            break;
+        }
+        idx += 1;
+    }
+
+    idx += 7;
+    buf.push(b'd');
+
+    let mut stack = 0;
+
+    loop {
+        match input[idx] {
+            b'e' if stack == 0 => break,
+            b'e' => {
+                stack -= 1;
+                buf.push(input[idx]);
+                idx += 1;
+            }
+            n if n >= b'0' && n <= b'9' => {
+                let mut idx2 = 0;
+
+                while input[idx + idx2] != b':' {
+                    buf.push(input[idx + idx2]);
+                    idx2 += 1;
+                }
+
+                let num = bytes_to_num(&input[idx..idx + idx2]);
+
+                idx += idx2;
+                for _ in 0..num + 1 {
+                    buf.push(input[idx]);
+                    idx += 1;
+                }
+            }
+            b'i' => {
+                while input[idx] != b'e' {
+                    buf.push(input[idx]);
+                    idx += 1;
+                }
+                buf.push(input[idx]);
+                idx += 1;
+            }
+            b'l' => {
+                stack += 1;
+                buf.push(input[idx]);
+                idx += 1;
+            }
+            b'd' => {
+                stack += 1;
+                buf.push(input[idx]);
+                idx += 1;
+            }
+            x => panic!("Unexpected byte: {}", x),
+        }
+    }
+
+    buf.push(b'e');
+    let mut hasher = Sha1::new();
+    hasher.update(&buf);
+
+    hasher.finalize().try_into().unwrap()
 }
 
 impl FromBencode for MetaInfo {
@@ -220,6 +306,8 @@ impl FromBencode for Info {
 
 #[cfg(test)]
 mod decode_torrent_tests {
+    use crate::tracker::hash_to_bytes;
+
     use super::*;
     use std::fs;
 
@@ -248,5 +336,15 @@ mod decode_torrent_tests {
         let torrent = read_torrent("./tests/torrent_files/test_local.torrent");
         let meta_info = MetaInfo::from_bencode(&torrent).unwrap();
         assert_eq!(meta_info.announce, "udp://192.168.37.239:3000");
+    }
+
+    #[test]
+    fn test_get_info_hash() {
+        let torrent = read_torrent("./tests/torrent_files/test_local.torrent");
+        let hash = get_info_hash(&torrent);
+        assert_eq!(
+            hash_to_bytes("52b62d34a8336f2e934df62181ad4c2f1b43c185"),
+            hash
+        );
     }
 }
