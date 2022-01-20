@@ -16,6 +16,7 @@ pub struct Peer {
     peer_choking: bool,
     peer_interested: bool,
     stream: TcpStream,
+    have: Vec<bool>,
 }
 
 // According to https://wiki.theory.org/index.php/BitTorrentSpecification#keep-alive:_.3Clen.3D0000.3E
@@ -30,14 +31,8 @@ async fn keepalive(peer: &Arc<RwLock<Peer>>) {
         interval.tick().await;
 
         loop {
-            {
-                peer.read().await.stream.writable().await;
-            }
-            let tw_res;
-            {
-                let pr = peer.write().await;
-                tw_res = pr.stream.try_write(&PAYLOAD);
-            }
+            peer.read().await.stream.writable().await;
+            let tw_res = peer.write().await.stream.try_write(&PAYLOAD);
 
             match tw_res {
                 Ok(n) => {
@@ -86,13 +81,10 @@ async fn listen_and_dispatch(peer: &Arc<RwLock<Peer>>) {
             1 => unchoke(&peer).await,
             2 => interested(&peer).await,
             3 => not_interested(&peer).await,
-            4 => have(&peer, &buffer).await,
-            5 => bitfield(&peer, &buffer).await,
+            4 => have(&peer, &buffer[1..]).await,
+            5 => bitfield(&peer, &buffer[1..]).await,
             n => panic!("Not implemented: {}", n),
         };
-
-        println!("size: {}", size);
-        println!("payload: {:x?}", buffer);
     }
 }
 
@@ -113,21 +105,43 @@ async fn not_interested(peer: &Arc<RwLock<Peer>>) {
 }
 
 async fn have(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
-    unimplemented!("have");
+    peer.write().await.have[u32::from_be_bytes(buffer.try_into().unwrap()) as usize] = true;
 }
 
 async fn bitfield(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
-    unimplemented!("bitfield");
+    assert!(peer.read().await.have.len() == buffer.len() * 8);
+    let mut idx = 0;
+
+    for &x in buffer {
+        // lock the struct at the beginning of each byte
+        let mut peer = peer.write().await;
+
+        peer.have[idx + 0] = x & (1 << 7) != 0;
+        peer.have[idx + 1] = x & (1 << 6) != 0;
+        peer.have[idx + 2] = x & (1 << 5) != 0;
+        peer.have[idx + 3] = x & (1 << 4) != 0;
+        peer.have[idx + 4] = x & (1 << 3) != 0;
+        peer.have[idx + 5] = x & (1 << 2) != 0;
+        peer.have[idx + 6] = x & (1 << 1) != 0;
+        peer.have[idx + 7] = x & (1 << 0) != 0;
+
+        idx += 8;
+    }
 }
 
 impl Peer {
-    pub async fn new(ip: Ipv4Addr, port: u16) -> Result<Arc<RwLock<Self>>, Box<dyn Error>> {
+    pub async fn new(
+        ip: Ipv4Addr,
+        port: u16,
+        pieces: usize,
+    ) -> Result<Arc<RwLock<Self>>, Box<dyn Error>> {
         let res = Arc::new(RwLock::new(Peer {
             am_choking: true,
             am_interested: false,
             peer_choking: true,
             peer_interested: false,
             stream: TcpStream::connect(format!("{:?}:{}", ip, port)).await?,
+            have: vec![false; pieces],
         }));
 
         let alive = res.clone();
