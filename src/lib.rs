@@ -1,6 +1,7 @@
 pub mod decode_torrent;
 pub mod definitions;
 pub mod handshake;
+pub mod peer;
 pub mod tracker;
 
 #[cfg(test)]
