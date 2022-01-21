@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::handshake::Handshake;
 
+// TODO: Add a list of shared files with peer
 pub struct Peer {
     am_choking: bool,
     am_interested: bool,
@@ -90,6 +91,9 @@ async fn listen_and_dispatch(peer: &Arc<RwLock<Peer>>) {
             3 => not_interested(&peer).await,
             4 => have(&peer, &buffer[1..]).await,
             5 => bitfield(&peer, &buffer[1..]).await,
+            6 => request(&peer, &buffer[1..]).await,
+            7 => piece(&peer, &buffer[1..]).await,
+            8 => cancel(&peer, &buffer[1..]).await,
             n => panic!("Not implemented: {}", n),
         };
     }
@@ -145,6 +149,18 @@ async fn bitfield(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
         idx += 1;
         shift -= 1;
     }
+}
+
+async fn request(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
+    unimplemented!("request");
+}
+
+async fn piece(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
+    unimplemented!("piece");
+}
+
+async fn cancel(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
+    unimplemented!("cancel");
 }
 
 impl Peer {
