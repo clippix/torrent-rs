@@ -1,3 +1,6 @@
+use std::fs;
+
+use bendy::decoding::FromBencode;
 use torrent_rs::*;
 
 use tokio::net::TcpStream;
@@ -33,23 +36,4 @@ async fn connect_announce_handshake() {
 
     assert_eq!(hash_bytes, *hs.get_hash());
     assert_ne!(*definitions::TORRENT_RS_PEER_ID, *hs.get_peer_id());
-}
-
-#[tokio::test]
-#[serial]
-async fn handshake_bitfield() {
-    let mut udpc = tracker::UdpConnection::new(TRACKER, None).await.unwrap();
-    udpc.connect().await.unwrap();
-
-    let ann = udpc.announce(HASH, None, Some(1)).await.unwrap();
-    let (addr, port) = ann.get_peers().unwrap()[0];
-
-    let mut hs = handshake::Handshake::default();
-    hs.set_hash(&tracker::hash_to_bytes(HASH));
-    let peer = peer::Peer::new(addr, port).await.unwrap();
-    {
-        let mut peer = peer.write().await;
-        let mut stream = peer.get_stream_mut();
-        hs.send(&mut stream).await.unwrap();
-    }
 }

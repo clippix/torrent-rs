@@ -9,7 +9,7 @@ use sha1::{Digest, Sha1};
 use crate::definitions::InfoHash;
 
 #[derive(Debug)]
-struct MetaInfo {
+pub struct MetaInfo {
     pub announce: String,
     pub info: Info,
     pub comment: Option<String>,
@@ -21,7 +21,7 @@ struct MetaInfo {
 
 // File related information (Single-file format)
 #[derive(Debug)]
-struct Info {
+pub struct Info {
     pub piece_length: String,
     pub pieces: Vec<String>,
     pub name: String,
@@ -41,7 +41,7 @@ fn bytes_to_num(input: &[u8]) -> usize {
 }
 
 // TODO: Find a more elegant / normal way of getting Info Hash
-fn get_info_hash(input: &[u8]) -> InfoHash {
+pub fn get_info_hash(input: &[u8]) -> InfoHash {
     let mut idx = 0;
     let mut buf = vec![];
 
@@ -215,11 +215,11 @@ impl FromBencode for MetaInfo {
     }
 }
 
-fn bytes_to_hash(hash: &[u8; 20]) -> String {
+pub fn bytes_to_hash(hash: &InfoHash) -> String {
     hash.iter().map(|c| format!("{:x}", c)).collect()
 }
 
-fn pieces_to_hash(input: &[u8]) -> Vec<String> {
+pub fn pieces_to_hash(input: &[u8]) -> Vec<String> {
     assert!(input.len() % 20 == 0);
 
     let mut res = Vec::new();
@@ -306,8 +306,6 @@ impl FromBencode for Info {
 
 #[cfg(test)]
 mod decode_torrent_tests {
-    use crate::tracker::hash_to_bytes;
-
     use super::*;
     use std::fs;
 
@@ -343,8 +341,8 @@ mod decode_torrent_tests {
         let torrent = read_torrent("./tests/torrent_files/test_local.torrent");
         let hash = get_info_hash(&torrent);
         assert_eq!(
-            hash_to_bytes("52b62d34a8336f2e934df62181ad4c2f1b43c185"),
-            hash
+            "52b62d34a8336f2e934df62181ad4c2f1b43c185".to_string(),
+            bytes_to_hash(&hash)
         );
     }
 }

@@ -54,12 +54,19 @@ async fn keepalive(peer: &Arc<RwLock<Peer>>) {
 async fn listen_and_dispatch(peer: &Arc<RwLock<Peer>>) {
     loop {
         peer.read().await.stream.readable().await.unwrap();
-        let size = peer.write().await.stream.read_u32().await;
+        let mut size = [0u8; 4];
+        let resp = peer.write().await.stream.try_read(&mut size);
 
-        if let Err(e) = size {
-            return;
+        if let Err(e) = resp {
+            if e.kind() == io::ErrorKind::WouldBlock {
+                // Doesn't please me, should find a way to read only when data is available
+                time::sleep(time::Duration::from_millis(100));
+                continue;
+            } else {
+                return;
+            }
         }
-        let size = size.unwrap();
+        let size = u32::from_be_bytes(size);
 
         if size == 0 {
             // Keep-alive
@@ -109,11 +116,13 @@ async fn have(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
 }
 
 async fn bitfield(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
-    assert!(peer.read().await.have.len() == buffer.len() * 8);
+    assert!(peer.read().await.have.len() <= buffer.len() * 8);
     let mut idx = 0;
+    let len = peer.read().await.have.len();
 
-    for &x in buffer {
+    while idx + 8 < len {
         // lock the struct at the beginning of each byte
+        let x = buffer[idx / 8];
         let mut peer = peer.write().await;
 
         peer.have[idx + 0] = x & (1 << 7) != 0;
@@ -126,6 +135,15 @@ async fn bitfield(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
         peer.have[idx + 7] = x & (1 << 0) != 0;
 
         idx += 8;
+    }
+
+    // Handle remaining bits
+    let mut peer = peer.write().await;
+    let mut shift = 7;
+    while idx < len {
+        peer.have[idx] = buffer[buffer.len() - 1] & (1 << shift) != 0;
+        idx += 1;
+        shift -= 1;
     }
 }
 
@@ -159,5 +177,9 @@ impl Peer {
 
     pub fn get_stream_mut(&mut self) -> &mut TcpStream {
         &mut self.stream
+    }
+
+    pub fn get_bitfield(&self) -> &Vec<bool> {
+        &self.have
     }
 }
