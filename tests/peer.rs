@@ -1,16 +1,14 @@
 use torrent_rs::*;
 
-use std::fs;
+use std::{fs, sync::Arc};
 
-use tokio::time;
+use tokio::{sync::RwLock, time};
 
 use bendy::decoding::FromBencode;
 
 use serial_test::serial;
 
-#[tokio::test]
-#[serial]
-async fn decode_handshake_bitfield() {
+async fn common() -> (handshake::Handshake, Arc<RwLock<peer::Peer>>) {
     let torrent = fs::read("./tests/torrent_files/test_local.torrent").unwrap();
     let meta_info = decode_torrent::MetaInfo::from_bencode(&torrent).unwrap();
     let info_hash = decode_torrent::get_info_hash(&torrent);
@@ -34,6 +32,14 @@ async fn decode_handshake_bitfield() {
         let mut stream = peer.get_stream_mut();
         hs.send(&mut stream).await.unwrap();
     }
+
+    (hs, peer)
+}
+
+#[tokio::test]
+#[serial]
+async fn decode_handshake_bitfield() {
+    let (_, peer) = common().await;
     // Wait for bitfield message to be sent and decoded
     time::sleep(time::Duration::from_secs(1)).await;
 
@@ -42,4 +48,14 @@ async fn decode_handshake_bitfield() {
     for &x in bitfield {
         assert_eq!(true, x);
     }
+}
+
+#[tokio::test]
+#[serial]
+#[ignore]
+// Check the result using wireshark
+async fn keepalive() {
+    // console_subscriber::init();
+    let (_, _) = common().await;
+    time::sleep(time::Duration::from_secs(240)).await;
 }

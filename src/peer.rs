@@ -32,7 +32,6 @@ async fn keepalive(peer: &Arc<RwLock<Peer>>) {
         interval.tick().await;
 
         loop {
-            peer.read().await.stream.writable().await;
             let tw_res = peer.write().await.stream.try_write(&PAYLOAD);
 
             match tw_res {
@@ -54,7 +53,6 @@ async fn keepalive(peer: &Arc<RwLock<Peer>>) {
 
 async fn listen_and_dispatch(peer: &Arc<RwLock<Peer>>) {
     loop {
-        peer.read().await.stream.readable().await.unwrap();
         let mut size = [0u8; 4];
         let resp = peer.write().await.stream.try_read(&mut size);
 
