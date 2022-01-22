@@ -1,5 +1,6 @@
 pub mod decode_torrent;
 pub mod definitions;
+pub mod file;
 pub mod handshake;
 pub mod peer;
 pub mod tracker;
