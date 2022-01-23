@@ -7,9 +7,13 @@ use std::{
     sync::Arc,
 };
 
-use tokio::sync::Mutex;
+use crate::definitions::InfoHash;
 
 use rio::Rio;
+
+use sha1::{Digest, Sha1};
+
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 struct Piece {
@@ -62,6 +66,12 @@ impl Piece {
         assert!(bytes_wrote == self.bytes.len());
 
         Ok(())
+    }
+
+    pub fn hash(&self) -> InfoHash {
+        let mut hasher = Sha1::new();
+        hasher.update(&self.bytes);
+        hasher.finalize().try_into().unwrap()
     }
 }
 
