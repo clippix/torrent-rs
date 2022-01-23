@@ -230,4 +230,19 @@ mod file_tests {
 
         fs::remove_file(OUT_FILE).unwrap();
     }
+
+    #[tokio::test]
+    async fn hash_local_torrent() {
+        const TORRENT: &str = "./tests/torrent_files/test_local.torrent";
+        let file = fs::OpenOptions::new().read(true).open(TORRENT).unwrap();
+        let size = fs::metadata(TORRENT).unwrap().size() as usize;
+
+        let mut piece = Piece::new(size, size, Arc::new(Mutex::new(rio::new().unwrap())));
+        piece.read(&file, 0).await.unwrap();
+
+        assert_eq!(
+            "4365572a000ba4d3a321594bf0509fd5abd8dfa3".to_string(),
+            crate::decode_torrent::bytes_to_hash(&piece.hash())
+        );
+    }
 }

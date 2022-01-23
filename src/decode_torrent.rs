@@ -216,7 +216,7 @@ impl FromBencode for MetaInfo {
 }
 
 pub fn bytes_to_hash(hash: &InfoHash) -> String {
-    hash.iter().map(|c| format!("{:x}", c)).collect()
+    hash.iter().map(|c| format!("{:02x}", c)).collect()
 }
 
 pub fn pieces_to_hash(input: &[u8]) -> Vec<String> {
