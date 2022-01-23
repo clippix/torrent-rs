@@ -4,22 +4,65 @@ use std::{
     io::Error,
     os::{raw::c_int, unix::fs::MetadataExt, unix::prelude::AsRawFd},
     path::Path,
+    sync::Arc,
 };
 
-const BLOCK_SIZE: usize = 2 << 14;
+use tokio::sync::Mutex;
 
-type Block = [u8; BLOCK_SIZE];
+use rio::Rio;
 
 #[derive(Debug)]
 struct Piece {
-    blocks: Vec<Block>,
+    piece_size: usize,
+    ring: Arc<Mutex<Rio>>,
+    bytes: Vec<u8>,
 }
 
 #[derive(Debug)]
 struct FileEntity {
     file: File,
+    ring: Arc<Mutex<Rio>>,
     piece_size: usize,
     pieces: Vec<Option<Piece>>,
+}
+
+impl Piece {
+    pub fn new(piece_size: usize, actual_size: usize, ring: Arc<Mutex<Rio>>) -> Self {
+        Piece {
+            piece_size,
+            ring,
+            bytes: vec![0u8; actual_size],
+        }
+    }
+
+    pub async fn read(&mut self, file: &File, offset: usize) -> io::Result<()> {
+        let bytes_read = self
+            .ring
+            .lock()
+            .await
+            .read_at(file, &mut self.bytes, offset as u64)
+            .await?;
+        assert!(bytes_read == self.bytes.len());
+
+        Ok(())
+    }
+
+    pub fn update(&mut self, offset: usize, data: &[u8]) {
+        assert!(offset + data.len() <= self.bytes.len());
+        self.bytes[offset..offset + data.len()].copy_from_slice(data);
+    }
+
+    pub async fn write(&mut self, file: &File, offset: usize) -> io::Result<()> {
+        let bytes_wrote = self
+            .ring
+            .lock()
+            .await
+            .write_at(file, &self.bytes, offset as u64)
+            .await?;
+        assert!(bytes_wrote == self.bytes.len());
+
+        Ok(())
+    }
 }
 
 impl FileEntity {
@@ -48,12 +91,14 @@ impl FileEntity {
 
         Ok(FileEntity {
             file,
+            ring: Arc::new(Mutex::new(rio::new()?)),
             piece_size,
             pieces: std::iter::repeat_with(|| None).take(pieces).collect(),
         })
     }
 }
 
+// TODO: handle failed allocation
 fn fallocate<S: AsRef<Path>>(file: S, size: usize) -> io::Result<File> {
     let file = fs::OpenOptions::new()
         .read(true)
@@ -123,12 +168,30 @@ mod file_tests {
 
     #[test]
     fn file_not_allowed() {
-        let fe = FileEntity::new("/root/haxxor", BLOCK_SIZE, BLOCK_SIZE);
+        let fe = FileEntity::new("/root/haxxor", 1024, 1024);
         assert!(fe.is_err());
         if let Err(e) = fe {
             assert_eq!(e.kind(), io::ErrorKind::PermissionDenied);
         } else {
             assert!(false);
         }
+    }
+
+    #[tokio::test]
+    async fn read_local_torrent() {
+        const TORRENT: &str = "./tests/torrent_files/test_local.torrent";
+        let fread = fs::read(TORRENT).unwrap();
+        let size = fs::metadata(TORRENT).unwrap().size();
+        let file = fs::OpenOptions::new().read(true).open(TORRENT).unwrap();
+
+        let mut piece = Piece::new(
+            size as usize,
+            size as usize,
+            Arc::new(Mutex::new(rio::new().unwrap())),
+        );
+        let res = piece.read(&file, 0).await;
+
+        assert!(res.is_ok());
+        assert_eq!(fread, piece.bytes);
     }
 }
