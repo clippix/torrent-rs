@@ -194,4 +194,30 @@ mod file_tests {
         assert!(res.is_ok());
         assert_eq!(fread, piece.bytes);
     }
+
+    #[tokio::test]
+    async fn write_local_torrent() {
+        const TORRENT: &str = "./tests/torrent_files/test_local.torrent";
+        const OUT_FILE: &str = "./duplicate.torrent";
+        let fread = fs::read(TORRENT).unwrap();
+        let size = fs::metadata(TORRENT).unwrap().size() as usize;
+        let fout = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(OUT_FILE)
+            .unwrap();
+
+        let mut piece = Piece::new(size, size, Arc::new(Mutex::new(rio::new().unwrap())));
+        piece.update(0, &fread);
+        assert_eq!(fread, piece.bytes);
+        let res = piece.write(&fout, 0).await;
+
+        drop(fout);
+        let out_read = fs::read(OUT_FILE).unwrap();
+
+        assert!(res.is_ok());
+        assert_eq!(fread, out_read);
+
+        fs::remove_file(OUT_FILE).unwrap();
+    }
 }
