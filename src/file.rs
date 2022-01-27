@@ -13,17 +13,17 @@ use rio::Rio;
 
 use sha1::{Digest, Sha1};
 
-use tokio::sync::Mutex;
+use tokio::{net::TcpStream, sync::Mutex};
 
 #[derive(Debug)]
-struct Piece {
+pub struct Piece {
     piece_size: usize,
     ring: Arc<Mutex<Rio>>,
-    bytes: Vec<u8>,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Debug)]
-struct FileEntity {
+pub struct FileEntity {
     file: File,
     ring: Arc<Mutex<Rio>>,
     piece_size: usize,
@@ -105,6 +105,49 @@ impl FileEntity {
             piece_size,
             pieces: std::iter::repeat_with(|| None).take(pieces).collect(),
         })
+    }
+
+    pub async fn load_piece(&mut self, index: usize) -> io::Result<()> {
+        if let Some(_) = self.pieces[index] {
+            return Ok(());
+        }
+
+        // TODO: Handle the case of the last piece
+        let mut piece = Piece::new(self.piece_size, self.piece_size, self.ring.clone());
+        piece.read(&self.file, index * self.piece_size).await?;
+        self.pieces[index] = Some(piece);
+
+        Ok(())
+    }
+
+    pub fn sub_piece(&self, index: usize, offset: usize, length: usize) -> Vec<u8> {
+        if let Some(p) = &self.pieces[index] {
+            p.bytes[offset..offset + length].try_into().unwrap()
+        } else {
+            // TODO: change panic to error
+            panic!("Block at index: {} not loaded", index);
+        }
+    }
+
+    pub async fn write_sub_piece(
+        &mut self,
+        index: usize,
+        offset: usize,
+        buf: &[u8],
+    ) -> io::Result<()> {
+        if self.pieces[index].is_none() {
+            self.load_piece(index).await?;
+        }
+
+        let mut p = self.pieces[index].as_mut().unwrap();
+        for (x, &y) in p.bytes[offset..offset + buf.len()]
+            .iter_mut()
+            .zip(buf.iter())
+        {
+            *x = y;
+        }
+
+        Ok(())
     }
 }
 

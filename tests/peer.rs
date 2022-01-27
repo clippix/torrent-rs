@@ -24,9 +24,7 @@ async fn common() -> (handshake::Handshake, Arc<RwLock<peer::Peer>>) {
 
     let mut hs = handshake::Handshake::default();
     hs.set_hash(&info_hash);
-    let peer = peer::Peer::new(addr, port, meta_info.info.pieces.len())
-        .await
-        .unwrap();
+    let peer = peer::Peer::new(addr, port, meta_info).await.unwrap();
     {
         let mut peer = peer.write().await;
         let mut stream = peer.get_stream_mut();

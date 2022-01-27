@@ -8,6 +8,8 @@ use std::io;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 
+use crate::decode_torrent::MetaInfo;
+use crate::file::FileEntity;
 use crate::handshake::Handshake;
 
 // TODO: Add a list of shared files with peer
@@ -18,6 +20,8 @@ pub struct Peer {
     peer_interested: bool,
     stream: TcpStream,
     have: Vec<bool>,
+    torrent: MetaInfo,
+    file: FileEntity,
 }
 
 // According to https://wiki.theory.org/index.php/BitTorrentSpecification#keep-alive:_.3Clen.3D0000.3E
@@ -59,7 +63,7 @@ async fn listen_and_dispatch(peer: &Arc<RwLock<Peer>>) {
         if let Err(e) = resp {
             if e.kind() == io::ErrorKind::WouldBlock {
                 // Doesn't please me, should find a way to read only when data is available
-                time::sleep(time::Duration::from_millis(100));
+                time::sleep(time::Duration::from_millis(100)).await;
                 continue;
             } else {
                 return;
@@ -149,8 +153,37 @@ async fn bitfield(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
     }
 }
 
+// TODO: check if piece is downloaded
+// A peer shouldn't request a piece we don't have but…
 async fn request(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
-    unimplemented!("request");
+    let index = u32::from_be_bytes(buffer[0..4].try_into().unwrap());
+    let begin = u32::from_be_bytes(buffer[4..8].try_into().unwrap());
+    let length = u32::from_be_bytes(buffer[8..12].try_into().unwrap());
+
+    let peer = peer.clone();
+
+    tokio::spawn(async move {
+        let res = peer.write().await.file.load_piece(index as usize).await;
+        if res.is_err() {
+            panic!("request: load_piece failed: {:?}", res);
+        }
+
+        let peer_lock = peer.write().await;
+        let buf = peer_lock
+            .file
+            .sub_piece(index as usize, begin as usize, length as usize);
+
+        let mut start = 0;
+
+        loop {
+            match peer_lock.stream.try_write(&buf[start..]) {
+                Ok(n) if n == buf.len() - start => break,
+                Ok(n) => start += n,
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => continue,
+                Err(e) => panic!("Unexpected error: {:?}", e),
+            }
+        }
+    });
 }
 
 async fn piece(peer: &Arc<RwLock<Peer>>, buffer: &[u8]) {
@@ -165,15 +198,25 @@ impl Peer {
     pub async fn new(
         ip: Ipv4Addr,
         port: u16,
-        pieces: usize,
+        torrent: MetaInfo,
     ) -> Result<Arc<RwLock<Self>>, Box<dyn Error>> {
+        let file = FileEntity::new(
+            &torrent.info.name,
+            usize::from_str_radix(&torrent.info.piece_length, 10)
+                .expect("Failed to convert piece length"),
+            usize::from_str_radix(&torrent.info.file_length, 10)
+                .expect("Failed to convert file length"),
+        )?;
+
         let res = Arc::new(RwLock::new(Peer {
             am_choking: true,
             am_interested: false,
             peer_choking: true,
             peer_interested: false,
             stream: TcpStream::connect(format!("{:?}:{}", ip, port)).await?,
-            have: vec![false; pieces],
+            have: vec![false; torrent.info.pieces.len()],
+            torrent,
+            file,
         }));
 
         let alive = res.clone();
