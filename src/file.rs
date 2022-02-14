@@ -39,12 +39,12 @@ impl Piece {
         }
     }
 
-    pub async fn read(&mut self, file: &File, offset: usize) -> io::Result<()> {
+    pub async fn read(&self, file: &File, offset: usize) -> io::Result<()> {
         let bytes_read = self
             .ring
             .lock()
             .await
-            .read_at(file, &mut self.bytes, offset as u64)
+            .read_at(file, &self.bytes, offset as u64)
             .await?;
         assert!(bytes_read == self.bytes.len());
 
@@ -108,12 +108,12 @@ impl FileEntity {
     }
 
     pub async fn load_piece(&mut self, index: usize) -> io::Result<()> {
-        if let Some(_) = self.pieces[index] {
+        if self.pieces[index].is_some() {
             return Ok(());
         }
 
         // TODO: Handle the case of the last piece
-        let mut piece = Piece::new(self.piece_size, self.piece_size, self.ring.clone());
+        let piece = Piece::new(self.piece_size, self.piece_size, self.ring.clone());
         piece.read(&self.file, index * self.piece_size).await?;
         self.pieces[index] = Some(piece);
 
@@ -139,7 +139,7 @@ impl FileEntity {
             self.load_piece(index).await?;
         }
 
-        let mut p = self.pieces[index].as_mut().unwrap();
+        let p = self.pieces[index].as_mut().unwrap();
         for (x, &y) in p.bytes[offset..offset + buf.len()]
             .iter_mut()
             .zip(buf.iter())
@@ -215,7 +215,7 @@ mod file_tests {
         if let Err(e) = fe {
             assert_eq!(e.kind(), io::ErrorKind::AlreadyExists);
         } else {
-            assert!(false);
+            panic!();
         }
     }
 
@@ -226,7 +226,7 @@ mod file_tests {
         if let Err(e) = fe {
             assert_eq!(e.kind(), io::ErrorKind::PermissionDenied);
         } else {
-            assert!(false);
+            panic!();
         }
     }
 
@@ -237,7 +237,7 @@ mod file_tests {
         let size = fs::metadata(TORRENT).unwrap().size();
         let file = fs::OpenOptions::new().read(true).open(TORRENT).unwrap();
 
-        let mut piece = Piece::new(
+        let piece = Piece::new(
             size as usize,
             size as usize,
             Arc::new(Mutex::new(rio::new().unwrap())),
@@ -280,11 +280,11 @@ mod file_tests {
         let file = fs::OpenOptions::new().read(true).open(TORRENT).unwrap();
         let size = fs::metadata(TORRENT).unwrap().size() as usize;
 
-        let mut piece = Piece::new(size, size, Arc::new(Mutex::new(rio::new().unwrap())));
+        let piece = Piece::new(size, size, Arc::new(Mutex::new(rio::new().unwrap())));
         piece.read(&file, 0).await.unwrap();
 
         assert_eq!(
-            "4365572a000ba4d3a321594bf0509fd5abd8dfa3".to_string(),
+            "c4e5b681c0bf06b5946229d63ce013b41495e9b7".to_string(),
             crate::decode_torrent::bytes_to_hash(&piece.hash())
         );
     }

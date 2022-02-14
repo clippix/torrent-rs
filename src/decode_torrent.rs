@@ -66,7 +66,7 @@ pub fn get_info_hash(input: &[u8]) -> InfoHash {
                 buf.push(input[idx]);
                 idx += 1;
             }
-            n if n >= b'0' && n <= b'9' => {
+            n if (b'0'..=b'9').contains(&n) => {
                 let mut idx2 = 0;
 
                 while input[idx + idx2] != b':' {
@@ -333,7 +333,7 @@ mod decode_torrent_tests {
     fn test_local_torrent() {
         let torrent = read_torrent("./tests/torrent_files/test_local.torrent");
         let meta_info = MetaInfo::from_bencode(&torrent).unwrap();
-        assert_eq!(meta_info.announce, "udp://192.168.37.239:3000");
+        assert_eq!(meta_info.announce, "udp://192.168.0.101:3000");
     }
 
     #[test]

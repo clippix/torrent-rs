@@ -27,8 +27,8 @@ async fn common() -> (handshake::Handshake, Arc<RwLock<peer::Peer>>) {
     let peer = peer::Peer::new(addr, port, meta_info).await.unwrap();
     {
         let mut peer = peer.write().await;
-        let mut stream = peer.get_stream_mut();
-        hs.send(&mut stream).await.unwrap();
+        let stream = peer.get_stream_mut();
+        hs.send(stream).await.unwrap();
     }
 
     (hs, peer)
@@ -44,7 +44,7 @@ async fn decode_handshake_bitfield() {
     let peer = peer.read().await;
     let bitfield = peer.get_bitfield();
     for &x in bitfield {
-        assert_eq!(true, x);
+        assert!(x);
     }
 }
 

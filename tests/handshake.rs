@@ -1,14 +1,10 @@
-use std::fs;
-
-use bendy::decoding::FromBencode;
 use torrent_rs::*;
 
 use tokio::net::TcpStream;
-use tokio::time;
 
 use serial_test::serial;
 
-const TRACKER: &str = "192.168.37.239:3000";
+const TRACKER: &str = "192.168.0.101:3000";
 const HASH: &str = "52b62d34a8336f2e934df62181ad4c2f1b43c185";
 
 #[tokio::test]

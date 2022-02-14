@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use crate::decode_torrent::MetaInfo;
 use crate::file::FileEntity;
-use crate::handshake::Handshake;
 
 // TODO: Add a list of shared files with peer
 pub struct Peer {
@@ -46,7 +45,7 @@ async fn keepalive(peer: &Arc<RwLock<Peer>>) {
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                     continue;
                 }
-                Err(e) => {
+                Err(_e) => {
                     // Maybe the socket closed
                     return;
                 }
@@ -202,9 +201,15 @@ impl Peer {
     ) -> Result<Arc<RwLock<Self>>, Box<dyn Error>> {
         let file = FileEntity::new(
             &torrent.info.name,
-            usize::from_str_radix(&torrent.info.piece_length, 10)
+            torrent
+                .info
+                .piece_length
+                .parse::<usize>()
                 .expect("Failed to convert piece length"),
-            usize::from_str_radix(&torrent.info.file_length, 10)
+            torrent
+                .info
+                .file_length
+                .parse::<usize>()
                 .expect("Failed to convert file length"),
         )?;
 

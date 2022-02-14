@@ -1,9 +1,5 @@
-use rand::prelude::*;
 use std::mem;
-use std::{
-    io,
-    net::{Ipv4Addr, SocketAddr},
-};
+use std::{io, net::Ipv4Addr};
 use tokio::net::UdpSocket;
 
 use crate::definitions::{InfoHash, PeerId, INFO_HASH_LEN, TORRENT_RS_PEER_ID};
@@ -38,7 +34,7 @@ struct ConnectOut {
 }
 
 #[repr(packed)]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct AnnounceIn {
     cid: ConnectionId,
     action: u32,
@@ -85,11 +81,12 @@ impl UdpConnection {
     pub async fn new(tracker: &str, id: Option<TransactionId>) -> io::Result<Self> {
         let sock = UdpSocket::bind(SOCKET_BIND).await?;
         sock.connect(tracker).await?;
+        let tid = id.unwrap_or_default();
 
         Ok(UdpConnection {
             socket: sock,
             cid: ConnectionId::default(),
-            tid: TransactionId::default(),
+            tid,
         })
     }
 
@@ -131,7 +128,7 @@ impl UdpConnection {
 
         let ann = AnnounceIn {
             cid: self.cid,
-            action: (1 as u32).to_be(),
+            action: (1_u32).to_be(),
             tid: self.tid,
             info_hash: hash_to_bytes(info_hash),
             peer_id: *pid,
@@ -186,10 +183,9 @@ impl AnnounceOut {
 #[cfg(test)]
 mod tracker_tests {
     use super::*;
-    use crate::definitions::TORRENT_RS_PEER_ID;
     use serial_test::serial;
 
-    const TRACKER: &str = "192.168.37.239:3000";
+    const TRACKER: &str = "192.168.0.101:3000";
 
     #[tokio::test]
     #[serial]
@@ -197,14 +193,14 @@ mod tracker_tests {
         let udpc = UdpConnection::new(TRACKER, None).await;
         if let Err(ref e) = udpc {
             println!("Error: {}", e);
-            assert!(false);
+            panic!();
         }
 
         let mut udpc = udpc.unwrap();
         let res = udpc.connect().await;
         if let Err(ref e) = res {
             println!("Error: {}", e);
-            assert!(false);
+            panic!();
         }
 
         assert_ne!(udpc.cid, 0);
